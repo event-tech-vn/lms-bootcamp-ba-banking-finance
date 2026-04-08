@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bootcamp Vibe Coding | Cole</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; margin: 0; }
+        .locked { filter: grayscale(1); opacity: 0.45; pointer-events: none; }
+        .video-container { position: relative; padding-bottom: 56.25%; height: 0; background: #0f172a; border-radius: 0.75rem; overflow: hidden; }
+        .video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        .active-lesson { border: 2px solid #6366f1; background-color: #f5f3ff; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        #lesson-list::-webkit-scrollbar { width: 5px; }
+        #lesson-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        #login-overlay {
+            position: fixed; inset: 0; background: #0f172a; z-index: 9999;
+            display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        .hidden { display: none !important; }
+        .btn-login {
+            background-color: #818cf8; color: #000; font-weight: 700;
+            padding: 0.75rem; border-radius: 0.75rem; width: 100%;
+            transition: all 0.2s ease; cursor: pointer;
+        }
+        .btn-login:hover:not(:disabled) { background-color: #6366f1; color: #fff; }
+        .btn-login:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        /* Video loading */
+        .video-loading-overlay {
+            position: absolute; inset: 0; background: #0f172a;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2;
+            transition: opacity 0.3s ease;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { width: 36px; height: 36px; border: 3px solid #334155; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 10px; }
+
+        /* Shake on error */
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 60%{transform:translateX(6px)} }
+        .shake { animation: shake 0.35s ease; }
+
+        /* Mobile sidebar */
+        @media (max-width: 1023px) {
+            #sidebar-panel { display: none; }
+            #sidebar-panel.open { display: block !important; }
+        }
+
+        /* Congrats overlay */
+        #congrats-overlay {
+            position: fixed; inset: 0; background: rgba(15,23,42,0.88); z-index: 9998;
+            display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        @keyframes popIn { 0%{transform:scale(0.85);opacity:0} 100%{transform:scale(1);opacity:1} }
+        .pop-in { animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+
+        /* Lockout warning */
+        #lockout-msg { transition: all 0.3s; }
+
+        /* Progress bar transition */
+        #progress-bar { transition: width 0.5s ease; }
+
+        /* Prev btn */
+        #prev-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+<!-- ============================================================
+     LOGIN OVERLAY
+============================================================ -->
+<div id="login-overlay">
+    <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200">
+        <div class="text-center mb-6">
+            <div class="flex items-center justify-center gap-2 mb-3">
+                <i data-lucide="terminal" class="text-indigo-500 w-8 h-8"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-900">Đăng nhập lớp học</h2>
+            <p class="text-slate-500 text-sm mt-1">Bootcamp Vibe Coding</p>
+        </div>
+
+        <form onsubmit="event.preventDefault(); handleManualLogin();" class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Tên đăng nhập</label>
+                <input type="text" id="login-name" autocomplete="username"
+                    class="w-full p-3 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Tên đăng nhập" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Email học viên</label>
+                <input type="email" id="login-email" autocomplete="email"
+                    class="w-full p-3 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Email" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Mật khẩu</label>
+                <div class="relative">
+                    <input type="password" id="login-pass" autocomplete="current-password"
+                        class="w-full p-3 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-indigo-500 pr-12"
+                        placeholder="Mật khẩu" required>
+                    <button type="button" onclick="togglePassword()"
+                        class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors">
+                        <i id="eye-icon" data-lucide="eye" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Lockout warning (shown when too many attempts) -->
+            <div id="lockout-msg" class="hidden text-amber-700 text-xs text-center font-bold p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                ⚠️ Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau <span id="lockout-timer">30</span>s
+            </div>
+
+            <button type="submit" id="login-btn" class="btn-login shadow-lg">
+                Đăng nhập
+            </button>
+
+            <div class="text-center mt-4">
+                <a href="mailto:event.tech.vn@gmail.com"
+                    class="text-sm text-indigo-600 hover:underline">
+                    Quên mật khẩu? Liên hệ: event.tech.vn@gmail.com
+                </a>
+            </div>
+        </form>
+
+        <p id="login-error" class="text-red-500 text-xs text-center mt-4 hidden font-bold">
+            ❌ Sai thông tin đăng nhập!
+        </p>
+    </div>
+</div>
+
+<!-- ============================================================
+     MAIN CONTENT
+============================================================ -->
+<div id="main-content" class="hidden">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white py-4 px-6 flex justify-between items-center sticky top-0 z-50 shadow-lg">
+        <h1 class="text-xl font-bold flex items-center gap-3">
+            <i data-lucide="terminal" class="text-indigo-400 w-8 h-8 shrink-0"></i>
+            Khóa học Bootcamp BA Advanced Banking & Finance
+        </h1>
+        <div class="flex items-center gap-4">
+            <div class="flex flex-col border-r border-slate-700 pr-4 text-right">
+                <span id="display-user-name" class="text-sm font-bold text-indigo-400 leading-snug"></span>
+                <button onclick="handleLogout()" class="text-[10px] text-red-400 hover:text-red-300 hover:underline text-right leading-snug transition-colors">
+                    Đăng xuất
+                </button>
+            </div>
+            <div class="hidden sm:block">
+                <p class="text-[10px] text-slate-400 uppercase">Tiến độ: <span id="progress-text">0/11</span></p>
+                <div class="w-28 bg-slate-700 rounded-full h-1.5 mt-1">
+                    <div id="progress-bar" class="bg-indigo-500 h-1.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Body -->
+    <div class="container mx-auto px-4 py-6 flex flex-col lg:flex-row gap-6">
+
+        <!-- Left: Video + Controls -->
+        <div class="lg:w-2/3">
+            <div class="bg-white p-4 rounded-xl shadow-md border border-slate-200">
+
+                <!-- Video -->
+                <div class="video-container mb-4">
+                    <div id="video-loading" class="video-loading-overlay">
+                        <div class="spinner"></div>
+                        <p class="text-xs text-slate-500">Đang tải video...</p>
+                    </div>
+                    <iframe id="main-video" src="" frameborder="0"
+                        allow="autoplay; fullscreen" allowfullscreen></iframe>
+                </div>
+
+                <!-- Lesson title + counter -->
+                <div class="flex items-start justify-between gap-3 mb-1">
+                    <h2 id="current-lesson-title"
+                        class="text-xl font-bold text-slate-900 underline decoration-indigo-500 underline-offset-8 flex-1">
+                    </h2>
+                    <span id="lesson-counter"
+                        class="text-xs bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-full font-bold whitespace-nowrap mt-1 shrink-0">
+                    </span>
+                </div>
+
+                <!-- Lesson description -->
+                <div id="current-lesson-desc" class="text-slate-500 text-sm mt-3 mb-6"></div>
+
+                <!-- Navigation buttons -->
+                <div class="flex flex-col sm:flex-row gap-3 border-t pt-4">
+                    <button id="prev-btn" onclick="prevLesson()" disabled
+                        class="px-4 py-3 border border-slate-300 text-slate-600 rounded-xl hover:bg-slate-50 font-bold text-sm flex items-center justify-center gap-2 transition-all">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i> Bài trước
+                    </button>
+                    <button id="complete-btn" onclick="completeLesson()"
+                        class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i>
+                        <span id="complete-btn-text">Hoàn thành &amp; Sang bài tiếp theo</span>
+                    </button>
+                </div>
+
+                <!-- Reset progress (less prominent, placed separately) -->
+                <div class="flex justify-end mt-3">
+                    <button onclick="resetProgress()"
+                        class="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1.5 transition-colors">
+                        <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Xóa tiến độ học
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Right: Lesson Sidebar -->
+        <div class="lg:w-1/3">
+
+            <!-- Mobile toggle button -->
+            <button id="sidebar-toggle-btn" onclick="toggleSidebar()"
+                class="w-full lg:hidden mb-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors shadow">
+                <i data-lucide="list-video" class="w-4 h-4 text-indigo-400"></i>
+                <span id="sidebar-toggle-text">Xem lộ trình bài học ▾</span>
+            </button>
+
+            <div id="sidebar-panel" class="bg-white rounded-xl shadow-md overflow-hidden border border-slate-200">
+                <div class="p-4 bg-slate-50 border-b font-bold text-xs uppercase tracking-widest text-slate-500 flex justify-between items-center">
+                    <span>Lộ trình bài học</span>
+                    <i data-lucide="list-video" class="w-4 h-4 text-indigo-600"></i>
+                </div>
+                <div id="lesson-list" class="max-h-[580px] overflow-y-auto p-2 space-y-2 text-sm"></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ============================================================
+     CONGRATS MODAL
+============================================================ -->
+<div id="congrats-overlay" class="hidden">
+    <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center pop-in">
+        <div class="text-6xl mb-4">🎉</div>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">Chúc mừng!</h2>
+        <p class="text-slate-600 mb-1">Bạn đã hoàn thành toàn bộ</p>
+        <p class="text-indigo-600 font-bold mb-6">Bootcamp Vibe Coding!</p>
+        <button onclick="document.getElementById('congrats-overlay').classList.add('hidden')"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-3 rounded-xl transition-colors w-full">
+            Xem lại các bài học
+        </button>
+    </div>
+</div>
+
+<!-- ============================================================
+     JAVASCRIPT
+     ⚠️ CẢNH BÁO BẢO MẬT:
+     File này sử dụng xác thực phía client (client-side auth).
+     Bất kỳ ai mở DevTools đều có thể xem thông tin đăng nhập.
+     Khuyến nghị: Chuyển sang Firebase Auth, Supabase, hoặc backend
+     riêng trước khi triển khai quy mô lớn.
+============================================================ -->
+<script>
+    /*
+     * =====================================================
+     * DANH SÁCH HỌC VIÊN - USER LIST
+     * Thêm / sửa / xóa tài khoản học viên tại đây.
+     * ⚠️ Lưu ý: KHÔNG dùng số điện thoại làm mật khẩu thật.
+     * =====================================================
+     */
+    const VALID_USERS = [
+        // { name: "A", email: "a@gmail.com", pass: "123" }, // ← TÀI KHOẢN TEST - ĐÃ TẮT
+        { name: "Admin", email: "admin@gmail.com", pass: "admin123"},
+        { name: "Nguyễn Doãn Hoàng Minh", email: "hoangminh8m@gmail.com", pass: "0922271805"}
+    ];
+
+    /*
+     * =====================================================
+     * DANH SÁCH BÀI HỌC - LESSON LIST
+     * Tất cả nội dung bài học giữ nguyên 100%.
+     * =====================================================
+     */
+    const lessons = [
+        { 
+            id: 1, 
+            title: "Buổi 1: General Domestic Fund Transfer", 
+            videoId: "1h1_GdUGMdo5t6L3ZzleR5VrJmTH6-pcC", 
+            desc: `<div style="line-height: 1.6;">
+                
+                <p><b>💻Nội dung chính:</b><br>
+                    - Giới thiệu tổng quan các loại chuyển tiền trong ngân hàng.<br>
+                    - Đi sâu vào 2 loại chuyển tiền: Same Owner Transfer và Intra-bank Transfer.
+                <br><br>
+                <p><b>🚀Mục tiêu buổi học:</b><br>
+                    Giúp học viên nắm được: <br>
+                    - Khác biệt giữa Same Owner Transfer và Intra-bank Transfer.<br>
+                    - Hiểu hệ thống nào tham gia khi thực hiện chuyển tiền.<br>
+                    - Nhìn thấy các bước xử lý trong một giao dịch chuyển tiền.<br>
+                    - Biết cách biểu diễn luồng nghiệp vụ ở mức BA.
+                <br><br>
+                <p><b>🚀Thực Hành:</b><br>
+                    - Vẽ flow chuyển tiền Same Owner Transfer.<br>
+                    - Vẽ flow chuyển tiền Intra-bank Transfer.<br>
+                    - Case discussion: hạn mức, validate, duplicate transaction.<br>
+                    - Mini exercise: mô tả 5–7 bước cho một giao dịch chuyển tiền.
+                <br><br>
+                <p>📚 <b>Slide tài liệu:</b> <a href="https://drive.google.com/file/d/1iRY4ugguZqs6TMUEiavyOZoxOS5v6udc/view?usp=drive_link" target="_blank" style="color:#6366f1; text-decoration: underline;">Link Slide Buổi 1</a></p>
+            </div>`
+        },
+        { 
+            id: 2, 
+            title: "Buổi 2: General External Fund Transfer", 
+            videoId: "1UPF_cS8kGk4HalzG4CDMcqJIt6lDkYd9", 
+            desc: `<div style="line-height: 1.6;">
+                <p>🧠 <b>Làm chủ tư duy Vibe Code!</b> Đây là chìa khóa cốt lõi của toàn bộ Bootcamp. Bạn sẽ học cách "trò chuyện" với AI để biến ý tưởng thành sản phẩm thực tế.</p>
+                
+                <p><b>💻Nội dung chính:</b><br>
+                    - Khái niệm External Fund Transfer:<br>
+                    + Chuyển tiền từ ngân hàng A sang ngân hàng B.<br>
+                    + Các hình thức thường gặp.<br>
+                    + Instant (real-time) chuyển nhanh 24/7.<br>
+                    - Thành phần tham gia:<br>
+                    + App / Internet Banking.<br>
+                    + Other interaction system in flow.<br>
+                <br>
+
+                <p><b>💻Mục tiêu buổi học:</b><br>
+                    Giúp học viên hiểu rõ:<br>
+                    - External Fund Transfer là gì và khác gì so với Intra-bank.<br>
+                    - Biết các hệ thống tham gia và điểm rủi ro.<br>
+                    - Nắm được 2 mô hình xử lý chính:<br>
+                    + Real-time switching.<br>
+                    + Batch clearing.<br>
+                    - Nhận biết impact đến người dùng: phí, cut-off, speed.<br>
+                <br>
+
+                <p><b>🚀Thực Hành:</b><br>
+                    Vẽ business flow cho External Fund Transfer (24/7 NAPAS).<br>
+                    - Xác định các điểm validation:<br>
+                    + Check người nhận<br>
+                    + Check ngân hàng đích<br>
+                    + Limit & Balance<br>
+                    - Mô tả 2 failure scenarios:<br>
+                    + Transfer bị reject<br>
+                    + Transfer pending due to clearing<br>
+                    - Thảo luận: Tại sao phải check AML trước khi gửi?<br>
+                <br>
+                
+                <p>📚 <b>Slide tài liệu:</b> <a href="https://docs.google.com/presentation/d/16kGOMtEK_qbvi4ahSoB8-yspaUHvFs0n/edit?usp=drive_link&ouid=101899340636375565657&rtpof=true&sd=true" target="_blank" style="color:#6366f1; text-decoration: underline;">Link Slide Buổi 2</a></p>
+                
+            </div>`
+        },
+        { 
+            id: 3, 
+            title: "Buổi 3: General International Fund Transfer", 
+            videoId: "1q8GMCIh5k7XWsyqD6XtsSjrGE1ng2mpB", 
+            desc: `<div style="line-height: 1.6;">
+
+                <p><b>💻Nội dung chính:</b><br>
+                    - Khái niệm International Fund Transfer: chuyển tiền ra nước ngoài giữa các ngân hàng khác quốc gia.<br>
+                    - Hệ thống sử dụng để truyền thông điệp thanh toán quốc tế: SWIFT.<br>
+                    - Thành phần tham gia: ngân hàng gửi, ngân hàng nhận, ngân hàng trung gian (nếu cần).<br>
+                <br>
+
+                <p><b>💻Mục tiêu buổi học:</b><br>
+                    - Hiểu quy trình chuyển tiền quốc tế hoạt động như thế nào.<br>
+                    - Nhận biết các thành phần tham gia và vai trò của SWIFT.<br>
+                    - Nắm rõ các yếu tố ảnh hưởng đến tốc độ.<br>
+                    - Correspondent routing<br>
+                    - Cut-off time<br>
+                    - AML/Sanction screening<br>
+                    - Biết phân biệt phí xử lý: OUR / BEN / SHA.<br>
+                    - Hiểu các ràng buộc về ngoại tệ và tỷ giá.<br>
+                <br>
+
+                <p><b>🚀Thực Hành:</b><br>
+                    - Vẽ business flow International Transfer qua SWIFT.
+                    Thảo luận case:
+                    - Giao dịch pending do AML/Sanction check.
+                    Bài tập:
+                    - Mô tả 5–7 bước cho transfer từ VN → US:
+                    - Debit account → FX conversion → SWIFT messaging → Correspondent → Receiving.
+                    Mini exercise:
+                    - Giải thích sự khác nhau giữa OUR/BEN/SHA với ví dụ.
+                <br>
+
+                <p>📚 <b>Slide tài liệu:</b> <a href="https://docs.google.com/presentation/d/161ZdN-whjk2sKHMkrnVTSu8WDf9En1_P/edit?usp=drive_link&ouid=101899340636375565657&rtpof=true&sd=true" target="_blank" style="color:#6366f1; text-decoration: underline;">Link Slide Buổi 3</a></p>
+                
+            </div>`
+        },
+        { 
+            id: 4, 
+            title: "Buổi 4: Cross Boder Transfer", 
+            videoId: "1SLHODf251HHxF_Ixz77Hltjx3d9E-4zV", 
+            desc: `<div style="line-height: 1.6;">
+                
+                <p><b>💻Nội dung chính:</b><br>
+                - Khái niệm cross-border remittance.<br>
+                - Các mô hình phổ biến.<br>
+                <br>
+
+                <p><b>💻Mục tiêu buổi học:</b><br>
+                    - Hiểu được mô hình dịch vụ remittance và khác biệt với chuyển tiền ngân hàng.<br>
+                    - Nhận biết actors: sender, agent, remittance network, receiver.<br>
+                    - Nắm được quy trình xử lý ở mức tổng quan:<br>
+                    - Gửi → truyền thông tin → xác thực → nhận tiền.<br>
+                    - Nhận diện các điểm kiểm soát: KYC, AML, hạn mức.<br>
+                    - Biết được khi nào sử dụng remittance thay vì SWIFT.<br>
+                <br>
+
+                <p><b>🚀Thực Hành:</b><br>
+                    - Vẽ luồng tổng quan cho Western Union.<br>
+                    - So sánh thời gian và phí remittance vs. SWIFT.<br>
+                    Case discussion:<br>
+                    - Người đi xuất khẩu lao động gửi tiền về nhà.<br>
+                    Bài tập:<br>
+                    - Mô tả 5–7 bước xử lý giao dịch cross-border tại agent.<br>
+                <br>
+
+                <p>📚 <b>Slide tài liệu:</b> <a href="https://docs.google.com/presentation/d/165Daj0Xixht1w0w6u-ES9YuyJBMWvSWq/edit?usp=drive_link&ouid=101899340636375565657&rtpof=true&sd=true" target="_blank" style="color:#6366f1; text-decoration: underline;">Link Slide Buổi 4</a></p>
+                
+            </div>`
+        },
+        { 
+            id: 5, 
+            title: "Buổi 5: Exchange Rate & Cross Currency Transfer", 
+            videoId: "1WdZvZWr-QNWUuFIfQBmXTpvxqagjpb5d", 
+            desc: `<div style="line-height: 1.6;">
+                
+                <p><b>💻Nội dung chính:</b><br>
+                    - Khái niệm Exchange Rate.<br>
+                    - Các loại tỷ giá thường gặp.<br>
+                    - Cross-currency transfer.<br>
+                <br>
+
+                <p><b>💻Mục tiêu buổi học:</b><br>
+                    - Nắm được khái niệm cơ bản về exchange rate và cách ngân hàng áp dụng trong giao dịch.<br>
+                    - Hiểu quy trình cross-currency transfer và điểm khác biệt với same currency.<br>
+                    Nhận biết:<br>
+                    - Source currency.<br>
+                    - Destination currency.<br>
+                    Nhận diện rủi ro:<br>
+                    - Biến động tỷ giá, cut-off, limit...<br>
+                <br>
+
+                <p><b>🚀Thực Hành:</b><br>
+                    - Vẽ luồng xử lý cross-currency transfer.<br>
+                    - Case discussion: Giao dịch bị pending do thị trường FX đóng cửa.<br>
+                <br>
+                
+                <p>📚 <b>Slide tài liệu:</b> <a href="https://docs.google.com/presentation/d/1f1Or22qVcxhEbESmG4Hv5-0obvJPuzWR/edit?usp=drive_link&ouid=101899340636375565657&rtpof=true&sd=true" target="_blank" style="color:#6366f1; text-decoration: underline;">Link Slide Buổi 5</a></p>
+                
+            </div>`
+        },
+        { 
+            id: 6, 
+            title: "Buổi 6: Batch Transfer", 
+            videoId: "12iDdxnomHX9JOZSmfB5gLwUYqFR0AEE9", 
+            desc: `<div style="line-height: 1.6;">
+                
+                <p><b>💻Nội dung chính:</b><br>
+                    - Khái niệm Batch Transfer.<br>
+                    - Đặc điểm.<br>
+                    - Thành phần tham gia.<br>
+                    - Các bước xử lý tổng quan.<br>
+                <br>
+
+                <p><b>💻Mục tiêu buổi học:</b><br>
+                    - Hiểu mô hình Batch Transfer và lý do doanh nghiệp sử dụng.<br>
+                    - Nhận biết luồng xử lý từ upload file → validate → approval → execution.<br>
+                    - Nắm được vai trò của maker-checker, multi-approval.<br>
+                <br>
+
+                <p><b>🚀Thực Hành:</b><br>
+                    - Thiết kế flow Batch Transfer cho chi lương.<br>
+                    - Tạo bảng mẫu file upload (employee, account, amount, note).<br>
+                    Case discussion:<br>
+                    - Một số giao dịch fail nhưng lô vẫn continue.<br>
+                    Mini exercise:<br>
+                    - Viết mô tả 5–7 bước từ upload đến kết quả.<br>
+                <br>
+
+                <p>📚 <b>Slide tài liệu:</b> <a href="https://docs.google.com/presentation/d/1Es4iw6zXOgcrn1f6LCFKA4RXLYqkerlV/edit?usp=drive_link&ouid=101899340636375565657&rtpof=true&sd=true" target="_blank" style="color:#6366f1; text-decoration: underline;">Link Slide Buổi 6</a></p>
+            </div>`
+        }
+    ];
+
+    // =====================================================
+    // STATE VARIABLES
+    // =====================================================
+    const TOTAL_LESSONS = lessons.length; // 11
+    const STORAGE_KEY   = 'vibecoding_progress'; // ← Đã đổi từ 'python_progress'
+    const SESSION_KEY   = 'logged_name';
+
+    let currentUnlocked  = 1;    // Bao nhiêu bài đã mở khóa (1-based: 1 = chỉ bài đầu)
+    let activeLessonIndex = 0;   // Index trong mảng lessons (0-based)
+
+    // Rate limiting
+    let loginAttempts = 0;
+    let lockoutUntil  = 0;
+    let lockoutTimer  = null;
+
+    // =====================================================
+    // LOGIN LOGIC
+    // =====================================================
+    function handleManualLogin() {
+        // Kiểm tra lockout
+        if (Date.now() < lockoutUntil) return;
+
+        const n = document.getElementById('login-name').value.trim();
+        const e = document.getElementById('login-email').value.trim();
+        const p = document.getElementById('login-pass').value;
+
+        const user = VALID_USERS.find(u => u.name === n && u.email === e && u.pass === p);
+
+        if (user) {
+            loginAttempts = 0;
+            localStorage.setItem(SESSION_KEY, user.name);
+            showMainContent(user.name);
+        } else {
+            loginAttempts++;
+            showLoginError();
+
+            // Khóa tạm 30 giây sau 5 lần sai
+            if (loginAttempts >= 5) {
+                lockoutUntil = Date.now() + 30000;
+                loginAttempts = 0;
+                document.getElementById('login-btn').disabled = true;
+                document.getElementById('lockout-msg').classList.remove('hidden');
+                startLockoutCountdown(30);
+            }
+
+            // Shake animation on login box
+            const box = document.getElementById('login-error').closest('.bg-white');
+            box.classList.add('shake');
+            setTimeout(() => box.classList.remove('shake'), 400);
+        }
+    }
+
+    function showLoginError() {
+        const err = document.getElementById('login-error');
+        err.classList.remove('hidden');
+        setTimeout(() => err.classList.add('hidden'), 3000);
+    }
+
+    function startLockoutCountdown(seconds) {
+        document.getElementById('lockout-timer').textContent = seconds;
+        clearInterval(lockoutTimer);
+        lockoutTimer = setInterval(() => {
+            seconds--;
+            document.getElementById('lockout-timer').textContent = seconds;
+            if (seconds <= 0) {
+                clearInterval(lockoutTimer);
+                document.getElementById('login-btn').disabled = false;
+                document.getElementById('lockout-msg').classList.add('hidden');
+                lockoutUntil = 0;
+            }
+        }, 1000);
+    }
+
+    function togglePassword() {
+        const input = document.getElementById('login-pass');
+        const icon  = document.getElementById('eye-icon');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.setAttribute('data-lucide', 'eye-off');
+        } else {
+            input.type = 'password';
+            icon.setAttribute('data-lucide', 'eye');
+        }
+        lucide.createIcons();
+    }
+
+    // =====================================================
+    // MAIN APP LOGIC
+    // =====================================================
+    function showMainContent(userName) {
+        document.getElementById('login-overlay').classList.add('hidden');
+        document.getElementById('main-content').classList.remove('hidden');
+        document.getElementById('display-user-name').innerText = userName;
+
+        // Khôi phục tiến độ đã lưu
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) currentUnlocked = Math.min(parseInt(saved), TOTAL_LESSONS);
+
+        renderLessons();
+        loadLesson(0); // Mặc định mở bài đầu tiên
+    }
+
+    function renderLessons() {
+        const container = document.getElementById('lesson-list');
+        container.innerHTML = '';
+
+        lessons.forEach((l, idx) => {
+            const isLocked    = idx >= currentUnlocked;
+            const isCompleted = idx < currentUnlocked - 1;
+            const isActive    = idx === activeLessonIndex;
+
+            const div = document.createElement('div');
+            div.className = `p-3 rounded-xl border flex items-center gap-3 transition-all
+                ${isLocked ? 'locked border-slate-100 cursor-default'
+                    : isActive ? 'active-lesson cursor-pointer'
+                    : 'bg-white border-slate-200 hover:border-indigo-300 cursor-pointer'}`;
+
+            if (!isLocked) div.onclick = () => loadLesson(idx);
+
+            // Badge icon/number
+            let badgeBg = isLocked ? 'bg-slate-200 text-slate-400' : 'bg-indigo-600 text-white shadow-sm';
+            let badgeContent;
+            if (isLocked) {
+                badgeContent = '<i data-lucide="lock" class="w-3 h-3"></i>';
+            } else if (isCompleted && !isActive) {
+                badgeContent = '<i data-lucide="check" class="w-3 h-3"></i>';
+                badgeBg = 'bg-emerald-500 text-white';
+            } else {
+                badgeContent = String(l.id);
+            }
+
+            div.innerHTML = `
+                <div class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[11px] shrink-0 ${badgeBg}">
+                    ${badgeContent}
+                </div>
+                <div class="flex-1 font-semibold leading-snug ${isActive ? 'text-indigo-700' : isLocked ? 'text-slate-400' : 'text-slate-700'}">
+                    ${l.title}
+                </div>
+            `;
+            container.appendChild(div);
+        });
+
+        updateHeaderProgress();
+        lucide.createIcons();
+    }
+
+    function loadLesson(idx) {
+        if (idx < 0 || idx >= TOTAL_LESSONS) return;
+        activeLessonIndex = idx;
+        const lesson = lessons[idx];
+
+        // Hiện loading, reset src trước khi load
+        document.getElementById('video-loading').style.opacity = '1';
+        document.getElementById('video-loading').style.display = 'flex';
+        document.getElementById('main-video').src = '';
+
+        setTimeout(() => {
+            document.getElementById('main-video').src =
+                `https://drive.google.com/file/d/${lesson.videoId}/preview`;
+        }, 80);
+
+        // Ẩn loading sau 3s (fallback nếu iframe không fire event)
+        setTimeout(() => {
+            document.getElementById('video-loading').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('video-loading').style.display = 'none';
+            }, 200);
+        }, 1000);
+
+        // Cập nhật tiêu đề, mô tả, counter
+        document.getElementById('current-lesson-title').innerText = lesson.title;
+        document.getElementById('current-lesson-desc').innerHTML  = lesson.desc;
+        document.getElementById('lesson-counter').innerText = `Buổi ${idx + 1} / ${TOTAL_LESSONS}`;
+
+        // Cập nhật nút "Hoàn thành"
+        const isLastLesson = (idx === TOTAL_LESSONS - 1);
+        const completeBtn  = document.getElementById('complete-btn');
+        const completeTxt  = document.getElementById('complete-btn-text');
+        if (isLastLesson) {
+            completeTxt.textContent = 'Hoàn thành khóa học! 🏆';
+            completeBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
+            completeBtn.classList.add('bg-amber-500', 'hover:bg-amber-600');
+        } else {
+            completeTxt.textContent = 'Hoàn thành & Sang bài tiếp theo';
+            completeBtn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+            completeBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        }
+
+        // Nút Bài trước
+        document.getElementById('prev-btn').disabled = (idx === 0);
+
+        // Scroll sidebar đến bài hiện tại
+        renderLessons();
+        scrollActiveLessonIntoView();
+    }
+
+    function scrollActiveLessonIntoView() {
+        const list  = document.getElementById('lesson-list');
+        const items = list.querySelectorAll('div[class*="p-3"]');
+        if (items[activeLessonIndex]) {
+            items[activeLessonIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }
+
+    function completeLesson() {
+        // Mở khóa bài tiếp theo nếu đây là bài ở ranh giới hiện tại
+        if (activeLessonIndex === currentUnlocked - 1 && currentUnlocked < TOTAL_LESSONS) {
+            currentUnlocked++;
+            localStorage.setItem(STORAGE_KEY, currentUnlocked);
+        }
+
+        const nextIdx = activeLessonIndex + 1;
+        if (nextIdx < TOTAL_LESSONS) {
+            loadLesson(nextIdx);
+        } else {
+            // Đã hoàn thành buổi cuối
+            updateHeaderProgress();
+            document.getElementById('congrats-overlay').classList.remove('hidden');
+        }
+    }
+
+    function prevLesson() {
+        if (activeLessonIndex > 0) loadLesson(activeLessonIndex - 1);
+    }
+
+    function updateHeaderProgress() {
+        const completed = Math.max(currentUnlocked - 1, 0);
+        const percent   = (completed / TOTAL_LESSONS) * 100;
+        document.getElementById('progress-bar').style.width  = `${percent}%`;
+        document.getElementById('progress-text').innerText   = `${completed}/${TOTAL_LESSONS}`;
+    }
+
+    function handleLogout() {
+        localStorage.removeItem(SESSION_KEY);
+        document.getElementById('main-content').classList.add('hidden');
+        document.getElementById('login-overlay').classList.remove('hidden');
+        // Reset form
+        document.getElementById('login-name').value  = '';
+        document.getElementById('login-email').value = '';
+        document.getElementById('login-pass').value  = '';
+        // Reset state
+        currentUnlocked    = 1;
+        activeLessonIndex  = 0;
+        lucide.createIcons();
+    }
+
+    function resetProgress() {
+        if (confirm('Bạn có chắc muốn xóa toàn bộ tiến độ học?\nTất cả các bài học sẽ bị khóa lại từ đầu.')) {
+            localStorage.removeItem(STORAGE_KEY);
+            currentUnlocked   = 1;
+            activeLessonIndex = 0;
+            loadLesson(0);
+        }
+    }
+
+    function toggleSidebar() {
+        const panel = document.getElementById('sidebar-panel');
+        const txt   = document.getElementById('sidebar-toggle-text');
+        const isOpen = panel.classList.toggle('open');
+        txt.textContent = isOpen ? 'Ẩn lộ trình bài học ▴' : 'Xem lộ trình bài học ▾';
+    }
+
+    // =====================================================
+    // KHỞI ĐỘNG - Tự động đăng nhập nếu session còn tồn tại
+    // (FIX: window.onload bị cắt ở file gốc)
+    // =====================================================
+    window.onload = function () {
+        lucide.createIcons(); // Render icons trên login screen
+        const savedName = localStorage.getItem(SESSION_KEY);
+        if (savedName) {
+            showMainContent(savedName); // Tự khôi phục đăng nhập, không cần reload
+        }
+    };
+</script>
+</body>
+</html>
